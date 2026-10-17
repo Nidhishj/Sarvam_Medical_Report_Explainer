@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+python-multipart
+sarvamai==0.1.37
+pypdf
+python-dotenv
