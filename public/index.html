@@ -83,9 +83,13 @@
   h1 em { font-style: italic; color: var(--accent); }
   .flow-line {
     min-height: 1.5em; font-size: clamp(22px, 3.4vw, 36px); font-weight: 600; line-height: 1.4;
+    padding: 0 4px;
+  }
+  /* gradient per word: background-clip on the parent doesn't paint children that have filter/transform */
+  .flow-line .w {
     background: linear-gradient(90deg, var(--accent), var(--accent-2));
     -webkit-background-clip: text; background-clip: text; color: transparent;
-    padding: 0 4px;
+    padding-bottom: .08em;
   }
   .flow-lang { font-size: 13px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; height: 20px; margin-top: 6px; }
   .hero p.sub { max-width: 560px; margin: 18px auto 0; color: var(--muted); font-size: 18px; }
@@ -230,8 +234,68 @@
   }
   footer { text-align: center; color: var(--muted); font-size: 13px; padding: 60px 20px 40px; }
 
+  /* ---------- AI provider (bring your own key) ---------- */
+  .provider-btn {
+    display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface);
+    border-radius: 999px; padding: 8px 14px; font-size: 14px; cursor: pointer; max-width: 260px;
+  }
+  .provider-btn:hover { border-color: var(--accent); }
+  .provider-btn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .provider-btn .live { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+  dialog {
+    border: 0; padding: 0; border-radius: 22px; width: min(480px, calc(100% - 32px));
+    box-shadow: 0 30px 80px rgba(22,22,31,.25); color: var(--ink);
+  }
+  dialog::backdrop { background: rgba(22,22,31,.35); backdrop-filter: blur(3px); }
+  .dialog-body { padding: 26px; display: grid; gap: 14px; }
+  .dialog-body h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 30px; }
+  .muted { color: var(--muted); font-size: 14px; margin: 0; }
+  .field { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+  .input {
+    width: 100%; border: 1px solid var(--line); background: #fffdfa; border-radius: 12px; padding: 11px 14px;
+    font-size: 15px; font-weight: 400;
+  }
+  .input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .key-row { display: flex; gap: 8px; }
+  .small-btn { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 0 14px; cursor: pointer; font-size: 13px; }
+  .check { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 400; }
+  .note { font-size: 13px; padding: 10px 14px; border-radius: 12px; background: var(--ok-soft); color: #17663a; }
+  .prov-status { font-size: 14px; min-height: 20px; }
+  .prov-status.ok { color: var(--ok); }
+  .prov-status.bad { color: var(--bad); }
+  .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+  .dialog-actions .btn { padding: 11px 20px; font-size: 15px; }
+  .btn-outline { background: var(--surface); border: 1px solid var(--line); color: var(--ink); }
+
+  /* ---------- ask a doubt ---------- */
+  .ask-card { max-width: 900px; margin: 40px auto 0; padding: 28px; }
+  .ask-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+  .ask-head h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 30px; }
+  .scope-pill { font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
+  .chat { display: grid; gap: 12px; margin: 18px 0; max-height: 460px; overflow-y: auto; }
+  .chat:empty { display: none; }
+  .bubble { max-width: 85%; padding: 12px 16px; border-radius: 18px; white-space: pre-wrap; line-height: 1.55; }
+  .bubble.user { justify-self: end; background: var(--ink); color: #fff; border-bottom-right-radius: 6px; }
+  .bubble.bot { justify-self: start; background: var(--bg); border: 1px solid var(--line); border-bottom-left-radius: 6px; }
+  .bubble.off { background: var(--warn-soft); border-color: #f3dca8; }
+  .bubble.err { background: var(--bad-soft); color: var(--bad); border-color: #f5c6c6; }
+  .bubble .tag { display: block; margin-top: 8px; font-size: 11px; color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
+  .typing span { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: var(--muted); animation: bob 1s infinite; }
+  .typing span:nth-child(2) { animation-delay: .15s; } .typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bob { 50% { transform: translateY(-4px); opacity: .5; } }
+  .suggest { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+  .suggest .chip { font-size: 14px; padding: 6px 14px; }
+  .ask-row { display: flex; gap: 10px; }
+  .ask-row .btn { padding: 11px 22px; }
+
   @media (max-width: 720px) {
-    nav .brand small, .model-label { display: none; }
+    nav .brand small, .model-label, #modelSelect { display: none; }
+    nav .wrap { gap: 10px; }
+    .nav-controls { gap: 6px; min-width: 0; }
+    .nav-controls .select { max-width: 110px; padding: 7px 28px 7px 12px; background-position: right 9px center; }
+    .provider-btn { max-width: 122px; padding: 7px 12px; }
+    .ask-card { padding: 20px; }
+    .bubble { max-width: 95%; }
     .hero { padding-top: 44px; }
     .flow-line { min-height: 3em; }
     .submit-card, .result-head { padding: 20px; }
@@ -254,8 +318,11 @@
     </a>
     <div class="nav-controls">
       <select id="langSelect" class="select" aria-label="Explanation language"></select>
-      <span class="model-label">Model</span>
-      <select id="modelSelect" class="select" aria-label="AI model"></select>
+      <span class="model-label" id="modelLabel">Model</span>
+      <select id="modelSelect" class="select" aria-label="Sarvam model"></select>
+      <button class="provider-btn" id="providerBtn" title="Choose AI provider / add your own API key">
+        <span class="live" aria-hidden="true"></span><span id="providerLabel">Sarvam AI</span>
+      </button>
     </div>
   </div>
 </nav>
@@ -353,7 +420,55 @@
       <button class="btn btn-ghost" id="againBtn">↺ Explain another report</button>
     </div>
   </section>
+
+  <!-- ---------- ask a doubt (medical only) ---------- -->
+  <section class="card ask-card" id="ask">
+    <div class="ask-head">
+      <h2>Have a doubt?</h2>
+      <span class="scope-pill">🩺 Health &amp; medical questions only</span>
+    </div>
+    <p class="muted" id="askContext" style="margin-top:8px">Ask anything about your health or medical tests, in any language. Once you add a report, answers will use it too.</p>
+    <div class="chat" id="chat" aria-live="polite"></div>
+    <div class="suggest" id="suggest"></div>
+    <form class="ask-row" id="askForm">
+      <input class="input" id="askInput" placeholder="e.g. What does HbA1c mean?" autocomplete="off" maxlength="1000">
+      <button class="btn btn-primary" id="askBtn" type="submit">Ask</button>
+    </form>
+  </section>
 </main>
+
+<!-- ---------- AI provider dialog ---------- -->
+<dialog id="providerDialog" aria-labelledby="provTitle">
+  <div class="dialog-body">
+    <h2 id="provTitle">AI provider</h2>
+    <p class="muted">Sarvam AI is built in and needs no key. To use another AI, choose it and paste your own API key.</p>
+    <label class="field">Provider
+      <select class="input" id="provSelect"></select>
+    </label>
+    <div id="provFields" class="dialog-body" style="padding:0">
+      <label class="field">API key
+        <span class="key-row">
+          <input class="input" id="provKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your API key">
+          <button class="small-btn" id="toggleKey" type="button">Show</button>
+        </span>
+      </label>
+      <label class="field">Model
+        <input class="input" id="provModel" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="field" id="baseRow">Base URL (OpenAI-compatible)
+        <input class="input" id="provBase" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1">
+      </label>
+      <label class="check"><input type="checkbox" id="provRemember"> Remember on this device</label>
+      <div class="note">🔒 Your key is sent only with your own requests and is never saved on our server.</div>
+    </div>
+    <div class="prov-status" id="provStatus" role="status"></div>
+    <div class="dialog-actions">
+      <button class="btn btn-outline" id="provTest" type="button">Test connection</button>
+      <button class="btn btn-ghost" id="provCancel" type="button">Cancel</button>
+      <button class="btn btn-primary" id="provSave" type="button">Save</button>
+    </div>
+  </div>
+</dialog>
 
 <footer>Built with Sarvam AI · Your report is never stored · Not a substitute for a doctor</footer>
 
@@ -400,7 +515,112 @@ const OVERALL_LABEL = { normal: "Mostly normal", attention: "Needs attention", u
 const SOURCE_LABEL = { "pdf-text": "read from PDF", "sarvam-vision": "read by Sarvam Vision", pasted: "pasted text" };
 const MAX_BYTES = 4 * 1024 * 1024;
 
-const state = { lang: "hi-IN", model: "sarvam-105b", mode: "upload", file: null, langs: FALLBACK_LANGS, sample: "" };
+const SUGGESTIONS = ["What does HbA1c mean?", "मेरा हीमोग्लोबिन कम क्यों है?", "How can I lower LDL cholesterol?", "Which doctor should I see?"];
+const PROVIDER_STORE = "samjho.provider";
+
+const state = {
+  lang: "hi-IN", model: "sarvam-105b", mode: "upload", file: null, langs: FALLBACK_LANGS, sample: "",
+  providers: [{ id: "sarvam", label: "Sarvam AI (built-in)", needs_key: false, default_model: "sarvam-105b", base_url: "" }],
+  provider: { provider: "sarvam" },  // or {provider, api_key, model, base_url, remember}
+  reportText: "", history: [],
+};
+
+/* ---------- AI provider (bring your own key) ---------- */
+function loadSavedProvider() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROVIDER_STORE) || "null");
+    if (saved && saved.provider) state.provider = saved;
+  } catch { /* storage blocked: keep Sarvam */ }
+}
+
+function saveProvider(p) {
+  state.provider = p;
+  try {
+    if (p.provider !== "sarvam" && p.remember) localStorage.setItem(PROVIDER_STORE, JSON.stringify(p));
+    else localStorage.removeItem(PROVIDER_STORE);
+  } catch { /* storage blocked: keep in memory only */ }
+  updateProviderUI();
+}
+
+const presetOf = (id) => state.providers.find((p) => p.id === id) || state.providers[0];
+const isSarvam = () => state.provider.provider === "sarvam";
+
+// what we send to the backend: null = Sarvam with the server key
+function providerPayload() {
+  if (isSarvam()) return null;
+  const { provider, api_key, model, base_url } = state.provider;
+  return { provider, api_key, model, base_url };
+}
+
+function answeredBy(out) {
+  return out.provider && out.provider !== "sarvam" ? `${presetOf(out.provider).label} · ${out.model}` : out.model;
+}
+
+function updateProviderUI() {
+  const sarvam = isSarvam();
+  $("#modelSelect").hidden = !sarvam;
+  $("#modelLabel").hidden = !sarvam;
+  $("#providerLabel").textContent = sarvam ? "Sarvam AI" : `${presetOf(state.provider.provider).label.replace(/ \(.*\)/, "")} · ${state.provider.model}`;
+}
+
+function fillProviderFields(id, fromSaved) {
+  const preset = presetOf(id);
+  const saved = fromSaved && state.provider.provider === id ? state.provider : {};
+  $("#provFields").hidden = !preset.needs_key;
+  $("#baseRow").hidden = id !== "custom";
+  $("#provKey").value = saved.api_key || "";
+  $("#provModel").value = saved.model || preset.default_model || "";
+  $("#provBase").value = saved.base_url || preset.base_url || "";
+  $("#provRemember").checked = !!saved.remember;
+  setProvStatus("");
+}
+
+function readProviderForm() {
+  return {
+    provider: $("#provSelect").value,
+    api_key: $("#provKey").value.trim(),
+    model: $("#provModel").value.trim(),
+    base_url: $("#provBase").value.trim(),
+    remember: $("#provRemember").checked,
+  };
+}
+
+function setProvStatus(msg, kind = "") {
+  const s = $("#provStatus");
+  s.textContent = msg;
+  s.className = `prov-status ${kind}`;
+}
+
+function validateProvider(p) {
+  if (p.provider === "sarvam") return "";
+  if (!p.api_key) return "Please paste your API key.";
+  if (!p.model) return "Please enter a model name.";
+  if (p.provider === "custom" && !/^https:\/\//.test(p.base_url)) return "Base URL must start with https://";
+  return "";
+}
+
+function openProviderDialog() {
+  $("#provSelect").replaceChildren(...state.providers.map((p) => new Option(p.label, p.id)));
+  $("#provSelect").value = state.provider.provider;
+  fillProviderFields(state.provider.provider, true);
+  $("#providerDialog").showModal();
+}
+
+async function testProvider() {
+  const p = readProviderForm();
+  const problem = validateProvider(p);
+  if (problem) return setProvStatus(problem, "bad");
+  setProvStatus("Testing…");
+  try {
+    const out = await api("/api/test-provider", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: p, model: $("#modelSelect").value }),
+    });
+    setProvStatus(`✓ Connected to ${out.model} (${(out.ms / 1000).toFixed(1)}s)`, "ok");
+  } catch (err) {
+    setProvStatus(err.message, "bad");
+  }
+}
 
 /* ---------- flowing text ---------- */
 function flowWords(el, text, stagger = 80) {
@@ -450,7 +670,10 @@ async function loadConfig() {
     state.sample = cfg.sample_report;
     models = cfg.models;
     state.model = cfg.default_model;
+    state.providers = cfg.providers;
   } catch { /* backend offline: keep fallbacks */ }
+  if (!state.providers.some((p) => p.id === state.provider.provider)) state.provider = { provider: "sarvam" };
+  updateProviderUI();
 
   $("#langSelect").replaceChildren(...state.langs.map((l) => new Option(`${l.native}${l.native !== l.name ? " · " + l.name : ""}`, l.code)));
   $("#modelSelect").replaceChildren(...models.map((m) => new Option(m, m)));
@@ -540,13 +763,14 @@ async function explain() {
     else form.append("text", $("#pasteText").value);
     const extracted = await api("/api/extract", { method: "POST", body: form });
     setStep("read", "done");
+    state.reportText = extracted.text;
 
     setStep("explain", "active");
     const t = setTimeout(() => { setStep("explain", "done"); setStep("ready", "active"); }, 2500);
     const out = await api("/api/explain", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ report_text: extracted.text, language: state.lang, model: $("#modelSelect").value }),
+      body: JSON.stringify({ report_text: extracted.text, language: state.lang, model: $("#modelSelect").value, provider: providerPayload() }),
     });
     clearTimeout(t);
     ["explain", "ready"].forEach((s) => setStep(s, "done"));
@@ -572,13 +796,15 @@ function render(out, extracted) {
   const r = out.result;
   $("#results").hidden = false;
   $("#extracted").textContent = extracted.text;
-  $("#meta").textContent = `${out.model} · ${(out.ms / 1000).toFixed(1)}s · ${SOURCE_LABEL[extracted.source] || extracted.source}`;
+  $("#meta").textContent = `${answeredBy(out)} · ${(out.ms / 1000).toFixed(1)}s · ${SOURCE_LABEL[extracted.source] || extracted.source}`;
+  $("#askContext").textContent = "Answers will use your report. Ask anything about it or your health.";
 
-  if (!r) {  // model didn't return clean JSON: show its raw text
+  if (!r || out.not_medical) {  // raw text (JSON failed) or "this isn't a medical report"
     $("#overallBadge").className = "badge attention";
-    $("#overallBadge").textContent = "Explanation";
-    $("#summary").textContent = out.raw;
+    $("#overallBadge").textContent = out.not_medical ? "Not a medical report" : "Explanation";
+    $("#summary").textContent = out.not_medical ? (r.summary || "This doesn't look like a medical report.") : out.raw;
     ["#findingsBlock", "#questionsCard", "#tipsCard"].forEach((s) => ($(s).hidden = true));
+    if (out.not_medical) state.reportText = "";
     return $("#results").scrollIntoView();
   }
 
@@ -611,7 +837,72 @@ function fillList(listSel, cardSel, items = []) {
   $(listSel).replaceChildren(...items.map((t) => el("li", null, t)));
 }
 
+/* ---------- ask a doubt ---------- */
+function addBubble(kind, text) {
+  const b = el("div", `bubble ${kind}`, text);
+  $("#chat").append(b);
+  $("#chat").scrollTop = $("#chat").scrollHeight;
+  return b;
+}
+
+async function ask(question) {
+  question = question.trim();
+  if (!question) return;
+  $("#askInput").value = "";
+  $("#askBtn").disabled = true;
+  addBubble("user", question);
+  const thinking = addBubble("bot typing", "");
+  thinking.innerHTML = "<span></span><span></span><span></span>";
+  try {
+    const out = await api("/api/ask", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question, language: state.lang, report_text: state.reportText, history: state.history,
+        model: $("#modelSelect").value, provider: providerPayload(),
+      }),
+    });
+    thinking.className = `bubble bot${out.off_topic ? " off" : ""}`;
+    thinking.textContent = out.answer;
+    thinking.append(el("span", "tag", `${out.off_topic ? "🩺 medical topics only · " : ""}${answeredBy(out)} · ${(out.ms / 1000).toFixed(1)}s`));
+    if (!out.off_topic) {  // keep refusals out of the context window
+      state.history.push({ role: "user", content: question }, { role: "assistant", content: out.answer });
+      state.history = state.history.slice(-6);
+    }
+  } catch (err) {
+    thinking.className = "bubble bot err";
+    thinking.textContent = err.message;
+  } finally {
+    $("#askBtn").disabled = false;
+    $("#chat").scrollTop = $("#chat").scrollHeight;
+  }
+}
+
 /* ---------- wiring ---------- */
+$("#askForm").onsubmit = (e) => { e.preventDefault(); ask($("#askInput").value); };
+$("#suggest").replaceChildren(...SUGGESTIONS.map((q) => {
+  const b = el("button", "chip", q);
+  b.type = "button";
+  b.onclick = () => ask(q);
+  return b;
+}));
+
+$("#providerBtn").onclick = openProviderDialog;
+$("#provSelect").onchange = (e) => fillProviderFields(e.target.value, true);
+$("#toggleKey").onclick = () => {
+  const k = $("#provKey");
+  k.type = k.type === "password" ? "text" : "password";
+  $("#toggleKey").textContent = k.type === "password" ? "Show" : "Hide";
+};
+$("#provTest").onclick = testProvider;
+$("#provCancel").onclick = () => $("#providerDialog").close();
+$("#provSave").onclick = () => {
+  const p = readProviderForm();
+  const problem = validateProvider(p);
+  if (problem) return setProvStatus(problem, "bad");
+  saveProvider(p.provider === "sarvam" ? { provider: "sarvam" } : p);
+  $("#providerDialog").close();
+};
+
 document.querySelectorAll(".tab").forEach((t) => (t.onclick = () => setMode(t.dataset.mode)));
 $("#fileInput").onchange = (e) => setFile(e.target.files[0]);
 $("#removeFile").onclick = () => setFile(null);
@@ -628,6 +919,9 @@ $("#againBtn").onclick = () => {
   setFile(null);
   $("#pasteText").value = "";
   $("#results").hidden = true;
+  state.reportText = "";
+  state.history = [];
+  $("#askContext").textContent = "Ask anything about your health or medical tests, in any language. Once you add a report, answers will use it too.";
   updateButton();
   $("#submit").scrollIntoView();
 };
@@ -640,6 +934,7 @@ drop.addEventListener("drop", (e) => setFile(e.dataTransfer.files[0]));
 fillMarquee($("#track1"), MARQUEE_1);
 fillMarquee($("#track2"), MARQUEE_2);
 startHeroRotation();
+loadSavedProvider();
 loadConfig();
 </script>
 </body>

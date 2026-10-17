@@ -4,3 +4,5 @@ python-multipart
 sarvamai==0.1.37
 pypdf
 python-dotenv
+httpx
+mcp>=2,<3

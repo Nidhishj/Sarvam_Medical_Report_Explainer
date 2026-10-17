@@ -10,7 +10,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
-from core import sarvam  # noqa: E402
+from core import explainer, llm, sarvam  # noqa: E402
 from core.prompts import LANGUAGES, SAMPLE_REPORT  # noqa: E402
 
 MAX_UPLOAD_BYTES = 4 * 1024 * 1024  # Vercel caps request bodies at 4.5 MB
@@ -20,7 +20,7 @@ app = FastAPI(title="Medical Report Explainer")
 
 
 def friendly_error(e: Exception, fallback: str) -> HTTPException:
-    if isinstance(e, (RuntimeError, TimeoutError)):
+    if isinstance(e, (RuntimeError, TimeoutError)):  # includes llm.ProviderError
         return HTTPException(502, str(e))
     status = getattr(e, "status_code", None)
     if status in (401, 403):
@@ -28,6 +28,18 @@ def friendly_error(e: Exception, fallback: str) -> HTTPException:
     if status == 429:
         return HTTPException(429, "Too many requests to Sarvam right now. Wait a few seconds and try again.")
     return HTTPException(502, f"{fallback} ({type(e).__name__}: {str(e)[:200]})")
+
+
+class ProviderConfig(BaseModel):
+    """Bring-your-own-key settings from the browser. Never logged or stored."""
+    provider: str = "sarvam"
+    api_key: str = ""
+    model: str = ""
+    base_url: str = ""
+
+
+def provider_dict(p: ProviderConfig | None) -> dict | None:
+    return p.model_dump() if p and p.provider != "sarvam" else None
 
 
 @app.get("/api/health")
@@ -43,6 +55,7 @@ def config():
         "models": models,
         "models_source": source,
         "default_model": sarvam.DEFAULT_MODEL,
+        "providers": llm.public_presets(),
         "sample_report": SAMPLE_REPORT,
     }
 
@@ -70,7 +83,8 @@ async def extract(file: UploadFile | None = File(None), text: str = Form("")):
 class ExplainRequest(BaseModel):
     report_text: str
     language: str = "hi-IN"
-    model: str = sarvam.DEFAULT_MODEL
+    model: str = sarvam.DEFAULT_MODEL  # Sarvam model, used when provider is Sarvam
+    provider: ProviderConfig | None = None
 
 
 @app.post("/api/explain")
@@ -78,9 +92,44 @@ def explain(req: ExplainRequest):
     if not req.report_text.strip():
         raise HTTPException(400, "The report is empty.")
     try:
-        return sarvam.explain(req.report_text, req.language, req.model)
+        return explainer.explain(req.report_text, req.language, provider_dict(req.provider), req.model)
     except Exception as e:
         raise friendly_error(e, "Couldn't explain the report right now. Please try again.")
+
+
+class AskRequest(BaseModel):
+    question: str
+    language: str = "hi-IN"
+    report_text: str = ""
+    history: list[dict] = []
+    model: str = sarvam.DEFAULT_MODEL
+    provider: ProviderConfig | None = None
+
+
+@app.post("/api/ask")
+def ask(req: AskRequest):
+    if not req.question.strip():
+        raise HTTPException(400, "Please type a question.")
+    try:
+        return explainer.ask(req.question, req.language, req.report_text, req.history,
+                             provider_dict(req.provider), req.model)
+    except Exception as e:
+        raise friendly_error(e, "Couldn't answer right now. Please try again.")
+
+
+class TestProviderRequest(BaseModel):
+    provider: ProviderConfig
+    model: str = sarvam.DEFAULT_MODEL
+
+
+@app.post("/api/test-provider")
+def test_provider(req: TestProviderRequest):
+    try:
+        out = llm.chat([{"role": "user", "content": "Reply with the single word: OK"}],
+                       provider_dict(req.provider), req.model, max_tokens=20)
+    except Exception as e:
+        raise friendly_error(e, "Connection test failed.")
+    return {"ok": True, "model": out["model"], "ms": out["ms"]}
 
 
 public_dir = ROOT / "public"

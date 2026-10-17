@@ -78,17 +78,29 @@ Supported output languages (TTS): `hi-IN bn-IN ta-IN te-IN kn-IN ml-IN mr-IN gu-
 
 ## Project structure
 ```
-api/index.py          FastAPI app: all /api/* routes (Vercel entrypoint)
-core/sarvam.py        Thin wrappers: extract_text, explain, ask, tts, stt, list_models
-core/prompts.py       System prompts + JSON schema text + sample report
+api/index.py          FastAPI app: /api/config, extract, explain, ask, test-provider (Vercel entrypoint)
+core/sarvam.py        Sarvam client, live model list, extract_text (pypdf → Sarvam Vision fallback)
+core/llm.py           Provider routing: sarvam | OpenAI-compatible | anthropic (bring-your-own-key)
+core/explainer.py     explain() + ask() with medical-only guardrails; shared by web API and MCP
+core/prompts.py       System prompts, OFF_TOPIC tag, languages, sample report
 public/index.html     Entire frontend (HTML + CSS + JS in one file)
-mcp_server.py         (stretch) FastMCP stdio server: explain_report, ask_about_report, list_models
-requirements.txt      fastapi, uvicorn, python-multipart, sarvamai, pypdf, python-dotenv, (mcp)
+mcp_server.py         MCP stdio server (mcp SDK v2: MCPServer, raise ToolError for user-facing errors)
+requirements.txt      fastapi, uvicorn, python-multipart, sarvamai, pypdf, python-dotenv, httpx, mcp>=2,<3
 vercel.json           rewrite /api/(.*) → /api/index
-.env                  SARVAM_API_KEY=...   (never commit)
+.env                  SARVAM_API_KEY=... (SARVAM_API also accepted); optional LLM_* for MCP (never commit)
+README.md             User/judge-facing docs: how it works, BYOK, guardrails, MCP setup, deploy
 ```
 `api/index.py` must add the project root to `sys.path` so `core` imports work on Vercel.
 Locally, FastAPI also serves `public/` at `/`, so one command runs everything.
+
+### Bring your own key & medical-only scope (implemented)
+- The browser sends `provider: {provider, api_key, model, base_url}` with explain/ask; `null` = Sarvam + server key.
+  Keys are per-request only: never log, store, or echo them. Custom base URLs must be public https (SSRF check in `llm.check_public_https`).
+- Medical-only: `ASK_SYSTEM` makes the model reply `[OFF_TOPIC] …` for non-health questions → backend sets
+  `off_topic: true`; off-topic turns are not added to chat history. `EXPLAIN_SYSTEM` returns `{"not_medical": true}`
+  for non-medical documents. Guardrails live in `core/explainer.py` + prompts, so they apply to every provider and to MCP.
+- Sarvam chat model ids come live from `chat_completion.list_models_v2()` (ids without ":"); currently
+  `sarvam-105b, glm5.3-flash, glm5.3, gemma4, deepseekv4.1-flash`.
 
 ## Commands (Windows / PowerShell)
 ```powershell
@@ -97,7 +109,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn api.index:app --reload --port 8000   # open http://localhost:8000
-python mcp_server.py                          # stretch: MCP over stdio
+python mcp_server.py                          # MCP over stdio (launched by an MCP client)
 ```
 Deploy (stretch): push to GitHub, import the repo in Vercel, set the `SARVAM_API_KEY` env var, deploy.
 
@@ -107,7 +119,9 @@ Deploy (stretch): push to GitHub, import the repo in Vercel, set the `SARVAM_API
 3. File upload: `pypdf` first, Sarvam Vision (doc_ai) fallback for scans/photos.
 4. 🔊 Listen (TTS) for the summary.
 5. 🎤 Voice follow-up questions (STT, then LLM, then TTS).
-6. Stretch: Vercel deploy, then MCP server, then a "compare two models" view.
+6. Stretch: Vercel deploy, then a "compare two models" view.
+
+Done so far: steps 1–3, bring-your-own-key providers, "Have a doubt?" chat (medical-only), MCP server, README.
 
 Each step should leave the app demo-able. Don't start the next step until the current one works end to end.
 

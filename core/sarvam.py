@@ -1,18 +1,16 @@
 """Thin wrappers around the Sarvam AI SDK."""
 
 import io
-import json
 import os
-import re
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 from pypdf import PdfReader
 from sarvamai import SarvamAI
 
-from core.prompts import EXPLAIN_SYSTEM, EXPLAIN_USER, LANGUAGES
-
-load_dotenv()
+# explicit path so it also works when an MCP client launches us from another folder
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 DEFAULT_MODEL = "sarvam-105b"
 FALLBACK_MODELS = ["sarvam-105b", "glm5.3", "gemma4", "deepseekv4.1-flash"]
@@ -77,26 +75,3 @@ def _digitise(filename: str, data: bytes, content_type: str) -> str:
     return text
 
 
-def explain(report_text: str, language: str, model: str) -> dict:
-    name, native = LANGUAGES.get(language, LANGUAGES["en-IN"])
-    messages = [
-        {"role": "system", "content": EXPLAIN_SYSTEM.format(language_name=name, language_native=native)},
-        {"role": "user", "content": EXPLAIN_USER.format(report_text=report_text[:15000])},
-    ]
-    start = time.time()
-    resp = client().chat.completions_v2(messages=messages, model=model or DEFAULT_MODEL, temperature=0.2, max_tokens=4000)
-    elapsed_ms = int((time.time() - start) * 1000)
-    raw = resp.choices[0].message.content or ""
-    return {"result": parse_json(raw), "raw": raw, "model": model or DEFAULT_MODEL, "ms": elapsed_ms}
-
-
-def parse_json(text: str) -> dict | None:
-    """Pull the first JSON object out of an LLM reply (tolerates ```json fences and stray text)."""
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end <= start:
-        return None
-    try:
-        return json.loads(text[start : end + 1])
-    except json.JSONDecodeError:
-        return None
