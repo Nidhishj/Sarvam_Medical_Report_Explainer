@@ -278,3 +278,16 @@ Limits: Vercel request bodies are capped at 4.5 MB (the app enforces 4 MB), and 
 | "Couldn't find the model" with Gemini | Set `GEMINI_MODEL` to a current model id |
 | No sound | Click 🔊 Listen once (browsers block audio until you interact). Check "Read aloud automatically" |
 | 🎤 does nothing / permission error | Allow the microphone in the address bar. Mic needs `localhost` or `https` |
+
+
+## DEMO
+
+The Intro Screen - 
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/c407a538-9848-4894-b942-3d88693e0a5a" />
+
+
+Screen to Upload the reports -
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/219dd6a8-fb70-42c9-b756-1d4aeb0bdbda" />
+
+The result Screen - 
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/f8f3cf4b-9c99-405d-b837-03903dfacbd9" />
