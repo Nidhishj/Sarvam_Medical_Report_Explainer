@@ -101,7 +101,7 @@ core/explainer.py   explain() and ask() with the medical-only guardrails (shared
 core/prompts.py     System prompts, languages, sample report
 public/index.html   The whole dashboard
 mcp_server.py       MCP server exposing the explainer as tools
-vercel.json         Routes /api/* to the Python function
+vercel.json         Function timeout (Vercel auto-detects the FastAPI app)
 ```
 
 ---
@@ -251,7 +251,7 @@ An empty `api_key` means "use the server's key for that provider".
 1. Push this repo to GitHub.
 2. In Vercel: **Add New → Project → import the repo** (no build settings needed).
 3. Add the environment variables `SARVAM_API_KEY` and `GEMINI_API_KEY`.
-4. Deploy. `vercel.json` routes `/api/*` to `api/index.py`, and `public/` is served as the site.
+4. Deploy. Vercel detects the FastAPI app in `api/index.py` and sends every path to it; `public/` is served as the site.
 
 Limits: Vercel request bodies are capped at 4.5 MB (the app enforces 4 MB), and functions here time out at
 60 s. The MCP server runs locally over stdio and is not part of the Vercel deployment.

@@ -86,7 +86,7 @@ core/prompts.py       System prompts, OFF_TOPIC tag, languages, sample report
 public/index.html     Entire frontend (HTML + CSS + JS in one file)
 mcp_server.py         MCP stdio server (mcp SDK v2: MCPServer, raise ToolError for user-facing errors)
 requirements.txt      fastapi, uvicorn, python-multipart, sarvamai, pypdf, python-dotenv, httpx, mcp>=2,<3
-vercel.json           rewrite /api/(.*) → /api/index
+vercel.json           function timeout only (Vercel auto-detects FastAPI and routes all paths to it; a rewrite to /api/index breaks routing)
 .env                  SARVAM_API_KEY=... (SARVAM_API also accepted); optional LLM_* for MCP (never commit)
 README.md             User/judge-facing docs: how it works, BYOK, guardrails, MCP setup, deploy
 ```
