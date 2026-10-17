@@ -32,7 +32,8 @@ _client = None
 def client() -> SarvamAI:
     global _client
     if _client is None:
-        key = (os.getenv("SARVAM_API_KEY") or os.getenv("SARVAM_API") or "").strip()
+        # tolerate quotes pasted around the value (common in hosting dashboards)
+        key = (os.getenv("SARVAM_API_KEY") or os.getenv("SARVAM_API") or "").strip().strip("\"'")
         if not key or key.startswith("paste_your"):
             raise RuntimeError("SARVAM_API_KEY is not set. Add it to the .env file.")
         _client = SarvamAI(api_subscription_key=key)

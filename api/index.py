@@ -24,7 +24,8 @@ def friendly_error(e: Exception, fallback: str) -> HTTPException:
         return HTTPException(502, str(e))
     status = getattr(e, "status_code", None)
     if status in (401, 403):
-        return HTTPException(502, "Sarvam rejected the API key. Check SARVAM_API_KEY in .env and restart the server.")
+        return HTTPException(502, "Sarvam rejected the API key. Check SARVAM_API_KEY (in .env locally, or in Vercel → "
+                                  "Settings → Environment Variables) and restart / redeploy.")
     if status == 429:
         return HTTPException(429, "Too many requests to Sarvam right now. Wait a few seconds and try again.")
     return HTTPException(502, f"{fallback} ({type(e).__name__}: {str(e)[:200]})")
