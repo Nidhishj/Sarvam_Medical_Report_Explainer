@@ -288,6 +288,32 @@
   .ask-row { display: flex; gap: 10px; }
   .ask-row .btn { padding: 11px 22px; }
 
+  /* ---------- voice (Sarvam Bulbul / Saaras) ---------- */
+  .voice-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
+  .btn-voice {
+    display: inline-flex; align-items: center; gap: 10px; border: 0; cursor: pointer; border-radius: 999px;
+    padding: 11px 20px; font-weight: 600; font-size: 15px; color: #fff;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow: 0 6px 18px rgba(242,102,43,.25);
+  }
+  .btn-voice:disabled { opacity: .5; cursor: not-allowed; }
+  .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+  .eq i { width: 3px; height: 4px; background: currentColor; border-radius: 2px; }
+  .playing .eq i { animation: eq .8s ease-in-out infinite; }
+  .playing .eq i:nth-child(2) { animation-delay: .2s; } .playing .eq i:nth-child(3) { animation-delay: .4s; }
+  @keyframes eq { 50% { height: 14px; } }
+  .voice-row .select { padding-block: 9px; }
+  .voice-note { font-size: 12px; color: var(--muted); }
+  .voice-err { font-size: 13px; color: var(--bad); }
+  .mic-btn {
+    flex: none; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface);
+    cursor: pointer; font-size: 20px; display: grid; place-items: center;
+  }
+  .mic-btn:hover { border-color: var(--accent); }
+  .mic-btn.rec { background: var(--bad); border-color: var(--bad); color: #fff; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(217,58,58,.5); } 100% { box-shadow: 0 0 0 14px rgba(217,58,58,0); } }
+  .rec-hint { font-size: 13px; color: var(--bad); margin-top: 8px; min-height: 18px; }
+  .speak-btn { border: 0; background: transparent; cursor: pointer; font-size: 13px; color: var(--accent); padding: 0; margin-left: 8px; font-weight: 600; }
+
   @media (max-width: 720px) {
     nav .brand small, .model-label, #modelSelect { display: none; }
     nav .wrap { gap: 10px; }
@@ -398,6 +424,13 @@
         <span class="meta" id="meta"></span>
       </div>
       <p class="summary" id="summary"></p>
+      <div class="voice-row">
+        <button class="btn-voice" id="listenBtn" type="button"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span id="listenLabel" data-label>🔊 Listen</span></button>
+        <select class="select" id="voiceSelect" aria-label="Voice"></select>
+        <label class="check"><input type="checkbox" id="autoSpeak" checked> Read aloud automatically</label>
+        <span class="voice-note">Voice by Sarvam Bulbul</span>
+        <span class="voice-err" id="voiceErr"></span>
+      </div>
       <div class="disclaimer"><span aria-hidden="true">ⓘ</span><span>This is for understanding only, not medical advice. Always consult your doctor before making any health decision.</span></div>
     </div>
 
@@ -431,9 +464,11 @@
     <div class="chat" id="chat" aria-live="polite"></div>
     <div class="suggest" id="suggest"></div>
     <form class="ask-row" id="askForm">
-      <input class="input" id="askInput" placeholder="e.g. What does HbA1c mean?" autocomplete="off" maxlength="1000">
+      <button class="mic-btn" id="micBtn" type="button" title="Ask by voice (any Indian language)" aria-label="Ask by voice">🎤</button>
+      <input class="input" id="askInput" placeholder="Type or tap 🎤 to speak…" autocomplete="off" maxlength="1000">
       <button class="btn btn-primary" id="askBtn" type="submit">Ask</button>
     </form>
+    <div class="rec-hint" id="recHint" aria-live="polite"></div>
   </section>
 </main>
 
@@ -522,21 +557,30 @@ const state = {
   lang: "hi-IN", model: "sarvam-105b", mode: "upload", file: null, langs: FALLBACK_LANGS, sample: "",
   providers: [{ id: "sarvam", label: "Sarvam AI (built-in)", needs_key: false, default_model: "sarvam-105b", base_url: "" }],
   provider: { provider: "sarvam" },  // or {provider, api_key, model, base_url, remember}
+  providerSaved: false, defaultProvider: "sarvam",
   reportText: "", history: [],
+  voices: ["ritu"], voice: "ritu", autoSpeak: true, resultLang: "hi-IN", lastSpeech: "",
 };
+const VOICE_STORE = "samjho.voice";
 
 /* ---------- AI provider (bring your own key) ---------- */
 function loadSavedProvider() {
   try {
     const saved = JSON.parse(localStorage.getItem(PROVIDER_STORE) || "null");
-    if (saved && saved.provider) state.provider = saved;
-  } catch { /* storage blocked: keep Sarvam */ }
+    if (saved && saved.provider) { state.provider = saved; state.providerSaved = true; }
+    const v = JSON.parse(localStorage.getItem(VOICE_STORE) || "null");
+    if (v) { state.voice = v.voice || state.voice; state.autoSpeak = v.autoSpeak !== false; }
+  } catch { /* storage blocked: use server defaults */ }
+}
+
+function saveVoicePrefs() {
+  try { localStorage.setItem(VOICE_STORE, JSON.stringify({ voice: state.voice, autoSpeak: state.autoSpeak })); } catch {}
 }
 
 function saveProvider(p) {
   state.provider = p;
   try {
-    if (p.provider !== "sarvam" && p.remember) localStorage.setItem(PROVIDER_STORE, JSON.stringify(p));
+    if (p.provider === "sarvam" || p.remember) localStorage.setItem(PROVIDER_STORE, JSON.stringify(p));
     else localStorage.removeItem(PROVIDER_STORE);
   } catch { /* storage blocked: keep in memory only */ }
   updateProviderUI();
@@ -545,10 +589,9 @@ function saveProvider(p) {
 const presetOf = (id) => state.providers.find((p) => p.id === id) || state.providers[0];
 const isSarvam = () => state.provider.provider === "sarvam";
 
-// what we send to the backend: null = Sarvam with the server key
+// what we send to the backend; an empty api_key means "use the server's key from .env"
 function providerPayload() {
-  if (isSarvam()) return null;
-  const { provider, api_key, model, base_url } = state.provider;
+  const { provider, api_key = "", model = "", base_url = "" } = state.provider;
   return { provider, api_key, model, base_url };
 }
 
@@ -568,6 +611,7 @@ function fillProviderFields(id, fromSaved) {
   const saved = fromSaved && state.provider.provider === id ? state.provider : {};
   $("#provFields").hidden = !preset.needs_key;
   $("#baseRow").hidden = id !== "custom";
+  $("#provKey").placeholder = preset.server_key ? "Optional: the server already has a key" : "Paste your API key";
   $("#provKey").value = saved.api_key || "";
   $("#provModel").value = saved.model || preset.default_model || "";
   $("#provBase").value = saved.base_url || preset.base_url || "";
@@ -593,7 +637,7 @@ function setProvStatus(msg, kind = "") {
 
 function validateProvider(p) {
   if (p.provider === "sarvam") return "";
-  if (!p.api_key) return "Please paste your API key.";
+  if (!p.api_key && !presetOf(p.provider).server_key) return "Please paste your API key.";
   if (!p.model) return "Please enter a model name.";
   if (p.provider === "custom" && !/^https:\/\//.test(p.base_url)) return "Base URL must start with https://";
   return "";
@@ -671,9 +715,19 @@ async function loadConfig() {
     models = cfg.models;
     state.model = cfg.default_model;
     state.providers = cfg.providers;
+    state.defaultProvider = cfg.default_provider;
+    state.voices = cfg.voices;
+    if (!state.voices.includes(state.voice)) state.voice = cfg.default_voice;
   } catch { /* backend offline: keep fallbacks */ }
-  if (!state.providers.some((p) => p.id === state.provider.provider)) state.provider = { provider: "sarvam" };
+  // nothing saved in this browser -> use the server's default text provider (Gemini if GEMINI_API_KEY is set)
+  if (!state.providerSaved || !state.providers.some((p) => p.id === state.provider.provider)) {
+    const id = state.providers.some((p) => p.id === state.defaultProvider) ? state.defaultProvider : "sarvam";
+    state.provider = { provider: id, model: presetOf(id).default_model };
+  }
   updateProviderUI();
+  $("#voiceSelect").replaceChildren(...state.voices.map((v) => new Option(`Voice: ${v[0].toUpperCase()}${v.slice(1)}`, v)));
+  $("#voiceSelect").value = state.voice;
+  $("#autoSpeak").checked = state.autoSpeak;
 
   $("#langSelect").replaceChildren(...state.langs.map((l) => new Option(`${l.native}${l.native !== l.name ? " · " + l.name : ""}`, l.code)));
   $("#modelSelect").replaceChildren(...models.map((m) => new Option(m, m)));
@@ -693,7 +747,7 @@ async function loadConfig() {
 function setLang(code) {
   state.lang = code;
   $("#langSelect").value = code;
-  document.querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", c.dataset.code === code));
+  document.querySelectorAll("#langChips .chip").forEach((c) => c.setAttribute("aria-pressed", c.dataset.code === code));
 }
 
 const langOf = (code) => state.langs.find((l) => l.code === code) || FALLBACK_LANGS[0];
@@ -749,6 +803,9 @@ async function api(url, options) {
 }
 
 async function explain() {
+  unlockAudio();  // we're in the click: allow the explanation to auto-play later
+  stopSpeaking();
+  state.resultLang = state.lang;
   hideError();
   $("#explainBtn").disabled = true;
   $("#results").hidden = true;
@@ -805,6 +862,7 @@ function render(out, extracted) {
     $("#summary").textContent = out.not_medical ? (r.summary || "This doesn't look like a medical report.") : out.raw;
     ["#findingsBlock", "#questionsCard", "#tipsCard"].forEach((s) => ($(s).hidden = true));
     if (out.not_medical) state.reportText = "";
+    readAloud($("#summary").textContent);
     return $("#results").scrollIntoView();
   }
 
@@ -829,12 +887,169 @@ function render(out, extracted) {
 
   fillList("#questions", "#questionsCard", r.questions_for_doctor);
   fillList("#tips", "#tipsCard", r.lifestyle_tips);
+  readAloud(speechFor(r));
   $("#results").scrollIntoView();
+}
+
+function readAloud(text) {
+  state.lastSpeech = text;
+  $("#voiceErr").textContent = "";
+  if (state.autoSpeak) speak(text, state.resultLang, $("#listenBtn"), $("#voiceErr"));
 }
 
 function fillList(listSel, cardSel, items = []) {
   $(cardSel).hidden = !items.length;
   $(listSel).replaceChildren(...items.map((t) => el("li", null, t)));
+}
+
+/* ---------- voice output: Sarvam Bulbul ---------- */
+const player = { audio: new Audio(), token: 0, btn: null };
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
+
+// call inside a click handler so later (async) playback is allowed by the browser
+function unlockAudio() {
+  if (player.unlocked) return;
+  player.unlocked = true;
+  player.audio.src = SILENT_WAV;
+  player.audio.play().catch(() => {});
+}
+
+// split into ~900-char pieces at sentence ends (., ?, !, ।) so the first audio starts quickly
+function chunkText(text, max = 900) {
+  const sentences = text.replace(/\s+/g, " ").match(/[^.!?।]+[.!?।]*\s*/g) || [text];
+  const chunks = [];
+  let cur = "";
+  for (const s of sentences) {
+    if ((cur + s).length > max && cur) { chunks.push(cur.trim()); cur = ""; }
+    cur += s.length > max ? s.slice(0, max) : s;
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks;
+}
+
+function setSpeakingUI(btn, mode) {  // mode: idle | loading | playing
+  if (!btn) return;
+  btn.classList.toggle("playing", mode === "playing");
+  const label = btn.querySelector("[data-label]") || btn;
+  const idle = btn.dataset.idle || "🔊 Listen";
+  label.textContent = mode === "loading" ? "⏳ Preparing audio…" : mode === "playing" ? "■ Stop" : idle;
+}
+
+function stopSpeaking() {
+  player.token++;
+  player.audio.pause();
+  setSpeakingUI(player.btn, "idle");
+  player.btn = null;
+}
+
+function playClip(b64, token) {
+  return new Promise((resolve) => {
+    if (token !== player.token) return resolve();
+    player.audio.onended = player.audio.onerror = () => resolve();
+    player.audio.src = `data:audio/wav;base64,${b64}`;
+    player.audio.play().catch(() => resolve());
+  });
+}
+
+const fetchClips = (text, language) => api("/api/tts", {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ text, language, voice: state.voice }),
+}).then((r) => r.audios);
+
+async function speak(text, language, btn, errEl) {
+  const sameButton = player.btn === btn && btn;
+  stopSpeaking();
+  if (sameButton || !text.trim()) return;  // second click on a playing button = stop
+  const token = player.token;
+  player.btn = btn;
+  if (errEl) errEl.textContent = "";
+  setSpeakingUI(btn, "loading");
+  const chunks = chunkText(text);
+  try {
+    let next = fetchClips(chunks[0], language);
+    for (let i = 0; i < chunks.length; i++) {
+      const clips = await next;
+      if (token !== player.token) return;
+      if (i + 1 < chunks.length) { next = fetchClips(chunks[i + 1], language); next.catch(() => {}); }
+      setSpeakingUI(btn, "playing");
+      for (const clip of clips) {
+        await playClip(clip, token);
+        if (token !== player.token) return;
+      }
+    }
+  } catch (err) {
+    if (token === player.token && errEl) errEl.textContent = err.message;
+  }
+  if (token === player.token) { setSpeakingUI(btn, "idle"); player.btn = null; }
+}
+
+// what we read aloud: the summary, then what each abnormal value means
+function speechFor(r) {
+  const flagged = (r.findings || []).filter((f) => f.status && f.status !== "normal" && f.meaning);
+  return [r.summary, ...flagged.map((f) => `${f.test}: ${f.meaning}`)].filter(Boolean).join(" ");
+}
+
+/* ---------- voice input: Sarvam Saaras ---------- */
+const rec = { recorder: null, chunks: [], timer: null, started: 0 };
+const MAX_REC_MS = 30000;  // Sarvam REST speech-to-text limit
+
+async function toggleRecording() {
+  if (rec.recorder) return stopRecording();
+  unlockAudio();
+  stopSpeaking();
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    return addBubble("bot err", "Voice input isn't supported in this browser. Please type your question.");
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    return addBubble("bot err", "Microphone permission was denied. Allow it in the browser's address bar and try again.");
+  }
+  const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
+  rec.recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  rec.chunks = [];
+  rec.recorder.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
+  rec.recorder.onstop = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    clearInterval(rec.timer);
+    $("#micBtn").classList.remove("rec");
+    $("#micBtn").textContent = "🎤";
+    const type = rec.recorder.mimeType || "audio/webm";
+    rec.recorder = null;
+    sendRecording(new Blob(rec.chunks, { type }));
+  };
+  rec.recorder.start();
+  rec.started = Date.now();
+  $("#micBtn").classList.add("rec");
+  $("#micBtn").textContent = "■";
+  const tick = () => {
+    const s = Math.floor((Date.now() - rec.started) / 1000);
+    $("#recHint").textContent = `● Listening… ${s}s (tap ■ to stop, max 30s). Speak in any Indian language.`;
+    if (Date.now() - rec.started >= MAX_REC_MS) stopRecording();
+  };
+  tick();
+  rec.timer = setInterval(tick, 250);
+}
+
+function stopRecording() {
+  if (rec.recorder?.state === "recording") rec.recorder.stop();
+}
+
+async function sendRecording(blob) {
+  if (blob.size < 1000) { $("#recHint").textContent = "That was too short. Hold on a little longer and speak."; return; }
+  $("#recHint").textContent = "Understanding what you said (Sarvam Saaras)…";
+  const form = new FormData();
+  form.append("audio", blob, blob.type.includes("mp4") ? "question.m4a" : "question.webm");
+  try {
+    const out = await api("/api/stt", { method: "POST", body: form });
+    $("#recHint").textContent = "";
+    // answer in the language that was spoken, if we support it
+    if (out.language && state.langs.some((l) => l.code === out.language)) setLang(out.language);
+    ask(out.transcript);
+  } catch (err) {
+    $("#recHint").textContent = err.message;
+  }
 }
 
 /* ---------- ask a doubt ---------- */
@@ -848,6 +1063,8 @@ function addBubble(kind, text) {
 async function ask(question) {
   question = question.trim();
   if (!question) return;
+  unlockAudio();
+  stopSpeaking();
   $("#askInput").value = "";
   $("#askBtn").disabled = true;
   addBubble("user", question);
@@ -863,7 +1080,14 @@ async function ask(question) {
     });
     thinking.className = `bubble bot${out.off_topic ? " off" : ""}`;
     thinking.textContent = out.answer;
-    thinking.append(el("span", "tag", `${out.off_topic ? "🩺 medical topics only · " : ""}${answeredBy(out)} · ${(out.ms / 1000).toFixed(1)}s`));
+    const tag = el("span", "tag", `${out.off_topic ? "🩺 medical topics only · " : ""}${answeredBy(out)} · ${(out.ms / 1000).toFixed(1)}s`);
+    const speakBtn = el("button", "speak-btn", "🔊 Listen");
+    speakBtn.type = "button";
+    const lang = state.lang, errEl = el("span", "voice-err");
+    speakBtn.onclick = () => { unlockAudio(); speak(out.answer, lang, speakBtn, errEl); };
+    tag.append(speakBtn, errEl);
+    thinking.append(tag);
+    if (state.autoSpeak) speak(out.answer, lang, speakBtn, errEl);
     if (!out.off_topic) {  // keep refusals out of the context window
       state.history.push({ role: "user", content: question }, { role: "assistant", content: out.answer });
       state.history = state.history.slice(-6);
@@ -885,6 +1109,11 @@ $("#suggest").replaceChildren(...SUGGESTIONS.map((q) => {
   b.onclick = () => ask(q);
   return b;
 }));
+
+$("#listenBtn").onclick = () => { unlockAudio(); speak(state.lastSpeech, state.resultLang, $("#listenBtn"), $("#voiceErr")); };
+$("#voiceSelect").onchange = (e) => { state.voice = e.target.value; saveVoicePrefs(); };
+$("#autoSpeak").onchange = (e) => { state.autoSpeak = e.target.checked; saveVoicePrefs(); if (!state.autoSpeak) stopSpeaking(); };
+$("#micBtn").onclick = toggleRecording;
 
 $("#providerBtn").onclick = openProviderDialog;
 $("#provSelect").onchange = (e) => fillProviderFields(e.target.value, true);
@@ -916,6 +1145,7 @@ $("#sampleBtn").onclick = () => {
   if (state.sample) explain();
 };
 $("#againBtn").onclick = () => {
+  stopSpeaking();
   setFile(null);
   $("#pasteText").value = "";
   $("#results").hidden = true;

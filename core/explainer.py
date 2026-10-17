@@ -23,7 +23,8 @@ def explain(report_text: str, language: str = "en-IN", provider: dict | None = N
         {"role": "system", "content": EXPLAIN_SYSTEM.format(language_name=name, language_native=native)},
         {"role": "user", "content": EXPLAIN_USER.format(report_text=report_text[:MAX_REPORT_CHARS])},
     ]
-    out = llm.chat(messages, provider, sarvam_model, max_tokens=4000)
+    # generous budget: "thinking" models (Gemini 2.5, sarvam-105b) spend tokens before the JSON
+    out = llm.chat(messages, provider, sarvam_model, max_tokens=8000)
     result = parse_json(out["text"])
     return {"result": result, "raw": out["text"], "not_medical": bool(result and result.get("not_medical")),
             "model": out["model"], "provider": out["provider"], "ms": out["ms"]}
@@ -41,7 +42,7 @@ def ask(question: str, language: str = "en-IN", report_text: str = "", history: 
             messages.append({"role": turn["role"], "content": str(turn["content"])[:2000]})
     messages.append({"role": "user", "content": question[:MAX_QUESTION_CHARS]})
 
-    out = llm.chat(messages, provider, sarvam_model, max_tokens=1500)
+    out = llm.chat(messages, provider, sarvam_model, max_tokens=3000)
     answer = strip_thinking(out["text"])
     off_topic = OFF_TOPIC_TAG in answer
     if off_topic:

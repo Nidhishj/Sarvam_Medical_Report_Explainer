@@ -4,8 +4,9 @@ Scope is health/medical only: non-medical questions come back with off_topic=tru
 and non-medical documents come back with not_medical=true.
 
 Run:   .venv\\Scripts\\python.exe mcp_server.py
-Uses Sarvam (SARVAM_API_KEY) by default. To use another provider set, in .env:
-  LLM_PROVIDER=openai|anthropic|gemini|openrouter|custom, LLM_API_KEY=..., LLM_MODEL=..., LLM_BASE_URL=...
+Text provider: same default as the web app (Gemini if GEMINI_API_KEY is set, else Sarvam).
+To force one, set in .env:
+  LLM_PROVIDER=sarvam|openai|anthropic|gemini|openrouter|custom, LLM_API_KEY=..., LLM_MODEL=..., LLM_BASE_URL=...
 """
 
 import os
@@ -36,8 +37,9 @@ server = MCPServer(
 
 
 def _provider() -> dict | None:
-    pid = os.getenv("LLM_PROVIDER", "sarvam").strip().lower()
-    if pid == "sarvam":
+    """None -> same default as the web app (Gemini if GEMINI_API_KEY is set, else Sarvam)."""
+    pid = os.getenv("LLM_PROVIDER", "").strip().lower()
+    if not pid:
         return None
     return {"provider": pid, "api_key": os.getenv("LLM_API_KEY", ""), "model": os.getenv("LLM_MODEL", ""),
             "base_url": os.getenv("LLM_BASE_URL", "")}

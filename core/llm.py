@@ -4,6 +4,7 @@ Users' keys are used only for the request in flight; never log or store them.
 """
 
 import ipaddress
+import os
 import socket
 import time
 from urllib.parse import urlparse
@@ -21,7 +22,7 @@ PROVIDERS = {
     "anthropic": {"label": "Anthropic Claude", "kind": "anthropic", "needs_key": True,
                   "default_model": "claude-haiku-5-5", "base_url": "https://api.anthropic.com/v1"},
     "gemini": {"label": "Google Gemini", "kind": "openai", "needs_key": True,
-               "default_model": "gemini-2.5-flash",
+               "default_model": "gemini-3.8-flash",  # gemini-2.5-flash is closed to new API users
                "base_url": "https://generativelanguage.googleapis.com/v1beta/openai"},
     "openrouter": {"label": "OpenRouter", "kind": "openai", "needs_key": True,
                    "default_model": "openai/gpt-4o-mini", "base_url": "https://openrouter.ai/api/v1"},
@@ -31,19 +32,45 @@ PROVIDERS = {
 
 TIMEOUT_S = 90
 
+# Optional server-side keys in .env. With a server key, users can pick that provider without pasting a key.
+SERVER_KEY_ENV = {"gemini": "GEMINI_API_KEY", "openai": "OPENAI_API_KEY",
+                  "anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY"}
+MODEL_ENV = {"gemini": "GEMINI_MODEL", "openai": "OPENAI_MODEL",
+             "anthropic": "ANTHROPIC_MODEL", "openrouter": "OPENROUTER_MODEL"}
+
 
 class ProviderError(RuntimeError):
     """Error with a message that is safe to show to the user."""
 
 
+def server_key(pid: str) -> str:
+    env = SERVER_KEY_ENV.get(pid)
+    return os.getenv(env, "").strip() if env else ""
+
+
+def default_model(pid: str) -> str:
+    return os.getenv(MODEL_ENV.get(pid, ""), "").strip() or PROVIDERS[pid]["default_model"]
+
+
+def default_provider_id() -> str:
+    """Text provider used when the browser doesn't choose one: TEXT_PROVIDER, else Gemini if keyed, else Sarvam."""
+    pid = os.getenv("TEXT_PROVIDER", "").strip().lower()
+    if pid in PROVIDERS:
+        return pid
+    return "gemini" if server_key("gemini") else "sarvam"
+
+
 def public_presets() -> list[dict]:
-    return [{"id": pid, **{k: v for k, v in p.items() if k != "kind"}} for pid, p in PROVIDERS.items()]
+    """Presets for the UI. Exposes only whether a server key exists, never the key."""
+    return [{"id": pid, **{k: v for k, v in p.items() if k != "kind"},
+             "default_model": default_model(pid), "server_key": bool(server_key(pid))}
+            for pid, p in PROVIDERS.items()]
 
 
 def chat(messages: list[dict], provider: dict | None = None, sarvam_model: str | None = None,
          max_tokens: int = 3000, temperature: float = 0.2) -> dict:
-    """Return {"text", "model", "provider", "ms"}. provider=None means Sarvam with the server key."""
-    provider = provider or {}
+    """Return {"text", "model", "provider", "ms"}. provider=None means the server default (see default_provider_id)."""
+    provider = provider or {"provider": default_provider_id()}
     pid = provider.get("provider") or "sarvam"
     if pid not in PROVIDERS:
         raise ProviderError(f"Unknown AI provider: {pid}")
@@ -56,11 +83,13 @@ def chat(messages: list[dict], provider: dict | None = None, sarvam_model: str |
             messages=messages, model=model, temperature=temperature, max_tokens=max_tokens)
         text = resp.choices[0].message.content or ""
     else:
-        key = (provider.get("api_key") or "").strip()
-        model = (provider.get("model") or preset["default_model"]).strip()
+        key = (provider.get("api_key") or "").strip() or server_key(pid)
+        model = (provider.get("model") or default_model(pid)).strip()
         base = (provider.get("base_url") or preset["base_url"]).strip().rstrip("/")
         if not key:
-            raise ProviderError(f"Please add your {preset['label']} API key in AI provider settings.")
+            env = SERVER_KEY_ENV.get(pid)
+            hint = f" or set {env} in .env" if env else ""
+            raise ProviderError(f"Please add your {preset['label']} API key in AI provider settings{hint}.")
         if not model:
             raise ProviderError("Please enter a model name in AI provider settings.")
         if pid == "custom":
@@ -99,7 +128,7 @@ def _post(url, headers, body, label, model):
         if r.status_code == 400 and "temperature" in r.text.lower():
             body = {k: v for k, v in body.items() if k != "temperature"}
             r = http.post(url, headers=headers, json=body)
-    if r.status_code in (401, 403):
+    if r.status_code in (401, 403) or (r.status_code == 400 and "api key" in r.text.lower()):  # Gemini: 400
         raise ProviderError(f"{label} rejected the API key. Check it in AI provider settings.")
     if r.status_code == 404:
         raise ProviderError(f"{label} couldn't find the model '{model}'. Check the model name.")

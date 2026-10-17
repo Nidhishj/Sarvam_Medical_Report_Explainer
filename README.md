@@ -1,12 +1,15 @@
-# Samjho: Medical Report Explainer
+﻿# Samjho: Medical Report Explainer
 
 > **समझो** (*samjho*) means "understand".
 
 Upload a medical report and Samjho explains it **in your own language, in simple words**. It works for
 anyone with no medical background. You can then ask follow-up doubts about your report or your health.
 
-Built for the Sarvam AI hackathon on **Sarvam AI** (Vision OCR + `sarvam-105b`). It supports **11 Indian
-languages**.
+Built for the Sarvam AI hackathon. It supports **11 Indian languages**.
+
+- **Text explanation:** Gemini (or Sarvam `sarvam-105b`, or any provider you plug in).
+- **Voice:** always **Sarvam**. Bulbul reads the explanation aloud, and Saaras understands spoken questions.
+- **Reading scanned reports:** Sarvam Vision.
 
 > ⚠️ Samjho is for understanding only. It is **not medical advice** and never diagnoses or prescribes.
 
@@ -19,6 +22,8 @@ languages**.
 | 📄 **Submit a report** | Drag-and-drop a PDF / JPG / PNG (≤ 4 MB), paste the text, or try the built-in sample |
 | 🔍 **Read scans and photos** | Digital PDFs are read instantly with `pypdf`. Scans and phone photos go through **Sarvam Vision** (Document AI OCR) |
 | 🗣️ **Explain in your language** | Hindi, English, Bengali, Tamil, Telugu, Kannada, Malayalam, Marathi, Gujarati, Punjabi, Odia |
+| 🔊 **Listen** | The explanation is read aloud in your language by **Sarvam Bulbul** (auto-play toggle, 8 voices) |
+| 🎤 **Ask by voice** | Speak your doubt in any Indian language. **Sarvam Saaras** transcribes it and detects the language, and the answer comes back in that language, spoken |
 | 🚦 **Clear verdict** | An overall badge (normal / needs attention / see a doctor soon), plus one card per test with value, normal range, ↑/↓ status and what it means |
 | 💬 **Have a doubt?** | Chat that answers **health and medical questions only**, using your report as context |
 | 🔑 **Bring your own AI** | Use Sarvam (built in) or paste your own key for OpenAI, Claude, Gemini, OpenRouter, or any OpenAI-compatible API |
@@ -33,15 +38,28 @@ flowchart LR
     U[User uploads report] --> X{PDF has text?}
     X -- yes --> T[pypdf text]
     X -- "no (scan/photo)" --> V[Sarvam Vision OCR]
-    T --> L[LLM + safety prompt]
+    T --> L["Gemini (text) + safety prompt"]
     V --> L
     L --> J[JSON: summary, findings, questions, tips]
     J --> D[Dashboard in user's language]
+    J --> S["Sarvam Bulbul: read aloud 🔊"]
+    M["🎤 Spoken doubt"] --> STT[Sarvam Saaras: speech to text]
+    STT --> Q
     D --> Q[Have a doubt? chat]
     Q --> G{Health / medical?}
     G -- yes --> A[Simple answer]
     G -- no --> R[Polite refusal]
+    A --> S
 ```
+
+**Who does what**
+
+| Step | Service | Endpoint |
+|---|---|---|
+| Read scanned report / photo | Sarvam Vision (`doc_ai.digitise`) | `/api/extract` |
+| Write the explanation and answers (text) | **Gemini** if `GEMINI_API_KEY` is set, else Sarvam `sarvam-105b` (switchable in the UI) | `/api/explain`, `/api/ask` |
+| Read text aloud | **Sarvam Bulbul** `bulbul:v3` | `/api/tts` |
+| Understand spoken questions | **Sarvam Saaras** `saaras:v3` (auto language detection) | `/api/stt` |
 
 1. **Extract** (`POST /api/extract`): text PDFs are parsed locally. If a PDF has under 80 characters of text,
    or the upload is an image, it is sent to Sarvam Vision (`doc_ai.digitise`) and polled until done (max 60 s).
@@ -51,6 +69,12 @@ flowchart LR
    cards. If the document isn't medical, it returns `not_medical: true`.
 3. **Ask** (`POST /api/ask`): follow-up questions with the report and the last few turns as context.
    Non-medical questions are refused (see [Medical-only guardrails](#medical-only-guardrails)).
+
+4. **Listen** (`POST /api/tts`): the browser splits the text into ~900-character pieces at sentence ends.
+   It fetches the first piece's audio from Bulbul and starts playing, while the next piece loads in the background.
+   It reads the summary plus what each abnormal value means. Chat answers can be played too.
+5. **Speak** (`POST /api/stt`): the mic records up to 30 s (webm/opus), and Saaras returns the transcript and
+   the detected language. The app switches to that language, so the answer is written and spoken in it.
 
 Reports are **never stored**. They live only in the request and in your browser tab.
 
@@ -94,8 +118,8 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1          # cmd: .venv\Scripts\activate.bat
 pip install -r requirements.txt
 
-# add your key
-echo SARVAM_API_KEY=sk_your_key_here > .env
+# add your keys: copy the template and fill it in (see "API keys" below)
+copy .env.example .env
 
 # run
 uvicorn api.index:app --reload --port 8000
@@ -105,6 +129,24 @@ Open **http://localhost:8000**. Every new terminal needs the `Activate` step aga
 After changing `.env`, restart the server (Ctrl+C, then run it again).
 
 On macOS/Linux use `python3 -m venv .venv` and `source .venv/bin/activate`.
+
+### API keys (`.env`)
+
+```ini
+SARVAM_API_KEY=sk_...      # required: voice (Bulbul + Saaras), scanned reports (Vision), Sarvam text models
+GEMINI_API_KEY=AIza...     # recommended: Gemini writes the text explanations
+# GEMINI_MODEL=gemini-3.8-flash   # optional override
+# TEXT_PROVIDER=gemini            # optional: force the default text provider (sarvam | gemini | openai | ...)
+# SARVAM_TTS_VOICE=ritu           # optional default voice
+```
+
+- Get a Gemini key at https://aistudio.google.com/apikey and a Sarvam key at https://dashboard.sarvam.ai.
+- **How the app chooses the text provider:** if `GEMINI_API_KEY` is set, Gemini is the default; otherwise Sarvam.
+  The provider button in the top bar shows what is active (e.g. "Google Gemini · gemini-3.8-flash"), and users can
+  still switch to Sarvam or paste their own key. Server keys are never sent to the browser. The UI only learns
+  *that* a key exists.
+- **Voice always uses Sarvam**, whichever provider wrote the text.
+- Restart the server after editing `.env`.
 
 ---
 
@@ -117,7 +159,7 @@ Click the **provider button** (top-right, shows "Sarvam AI") to switch provider:
 | Sarvam AI | `sarvam-105b` | Built in, uses the server's key. Pick other Sarvam models in the **Model** dropdown |
 | OpenAI | `gpt-4o-mini` | |
 | Anthropic Claude | `claude-haiku-5-5` | |
-| Google Gemini | `gemini-2.5-flash` | Via Gemini's OpenAI-compatible endpoint |
+| Google Gemini | `gemini-3.8-flash` | Via Gemini's OpenAI-compatible endpoint |
 | OpenRouter | `openai/gpt-4o-mini` | Any OpenRouter model id |
 | Other | — | Any OpenAI-compatible API (`https://…/v1`) |
 
@@ -195,9 +237,12 @@ LLM_BASE_URL=                   # only for custom
 | POST | `/api/extract` | multipart `file` **or** form `text` | `{text, source: pdf-text \| sarvam-vision \| pasted}` |
 | POST | `/api/explain` | `{report_text, language, model, provider?}` | `{result, raw, not_medical, model, provider, ms}` |
 | POST | `/api/ask` | `{question, language, report_text?, history?, model, provider?}` | `{answer, off_topic, model, provider, ms}` |
+| POST | `/api/tts` | `{text, language, voice?}` (≤ 2500 chars) | `{audios: [base64 WAV, …]}` |
+| POST | `/api/stt` | multipart `audio` (≤ 30 s) | `{transcript, language}` |
 | POST | `/api/test-provider` | `{provider: {provider, api_key, model, base_url}}` | `{ok, model, ms}` |
 
-`provider` is optional: leave it out (or send `{"provider": "sarvam"}`) to use Sarvam with the server key.
+`provider` is optional: leave it out to use the server default (Gemini if `GEMINI_API_KEY` is set, else Sarvam).
+An empty `api_key` means "use the server's key for that provider".
 
 ---
 
@@ -205,7 +250,7 @@ LLM_BASE_URL=                   # only for custom
 
 1. Push this repo to GitHub.
 2. In Vercel: **Add New → Project → import the repo** (no build settings needed).
-3. Add the environment variable `SARVAM_API_KEY`.
+3. Add the environment variables `SARVAM_API_KEY` and `GEMINI_API_KEY`.
 4. Deploy. `vercel.json` routes `/api/*` to `api/index.py`, and `public/` is served as the site.
 
 Limits: Vercel request bodies are capped at 4.5 MB (the app enforces 4 MB), and functions here time out at
@@ -215,9 +260,8 @@ Limits: Vercel request bodies are capped at 4.5 MB (the app enforces 4 MB), and 
 
 ## Roadmap
 
-- 🔊 Listen to the explanation (Sarvam **Bulbul** text-to-speech)
-- 🎤 Ask doubts by voice (Sarvam **Saaras** speech-to-text, auto language detection)
 - ⚖️ Compare two models side by side
+- 🔁 Streaming voice (Bulbul streaming) for even faster first audio
 - 🌐 Hosted MCP over streamable HTTP
 
 ## Troubleshooting
@@ -230,3 +274,7 @@ Limits: Vercel request bodies are capped at 4.5 MB (the app enforces 4 MB), and 
 | PowerShell blocks `Activate.ps1` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
 | Port 8000 busy | `--port 8001` |
 | Model dropdown shows a short fallback list | The live Sarvam model list couldn't be fetched. The app still works |
+| "Google Gemini rejected the API key" | Fix `GEMINI_API_KEY` in `.env`, restart |
+| "Couldn't find the model" with Gemini | Set `GEMINI_MODEL` to a current model id |
+| No sound | Click 🔊 Listen once (browsers block audio until you interact). Check "Read aloud automatically" |
+| 🎤 does nothing / permission error | Allow the microphone in the address bar. Mic needs `localhost` or `https` |

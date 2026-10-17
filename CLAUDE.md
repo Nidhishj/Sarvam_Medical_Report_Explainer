@@ -1,4 +1,4 @@
-# Medical Report Explainer (Sarvam Hackathon)
+﻿# Medical Report Explainer (Sarvam Hackathon)
 
 A simple web dashboard where anyone uploads a medical report (PDF, photo, or pasted text) and gets it
 explained **in their own language**, in plain words a non-medical person understands. They can listen to
@@ -92,6 +92,15 @@ README.md             User/judge-facing docs: how it works, BYOK, guardrails, MC
 ```
 `api/index.py` must add the project root to `sys.path` so `core` imports work on Vercel.
 Locally, FastAPI also serves `public/` at `/`, so one command runs everything.
+
+### Text vs voice split (implemented)
+- **Text** (explain/ask): server default = `TEXT_PROVIDER` env, else Gemini if `GEMINI_API_KEY` is set, else Sarvam
+  (`llm.default_provider_id`). Server keys (`GEMINI_API_KEY`, `OPENAI_API_KEY`, …) are used when the browser sends
+  a provider with an empty `api_key`; `/api/config` only exposes `server_key: true/false`, never the key.
+- **Voice is always Sarvam**: `/api/tts` → Bulbul `bulbul:v3` (≤2500 chars, voices in `sarvam.TTS_VOICES`, pace 0.95);
+  `/api/stt` → Saaras `saaras:v3`, `language_code="unknown"` (auto-detect). Frontend chunks TTS text at ~900 chars and
+  prefetches the next chunk while playing; `unlockAudio()` runs inside click handlers so async auto-play is allowed.
+- Spoken question → detected language becomes the UI language → answer is written + spoken in it.
 
 ### Bring your own key & medical-only scope (implemented)
 - The browser sends `provider: {provider, api_key, model, base_url}` with explain/ask; `null` = Sarvam + server key.

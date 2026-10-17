@@ -39,7 +39,8 @@ class ProviderConfig(BaseModel):
 
 
 def provider_dict(p: ProviderConfig | None) -> dict | None:
-    return p.model_dump() if p and p.provider != "sarvam" else None
+    """None -> server default text provider (Gemini if GEMINI_API_KEY is set, else Sarvam)."""
+    return p.model_dump() if p else None
 
 
 @app.get("/api/health")
@@ -56,6 +57,9 @@ def config():
         "models_source": source,
         "default_model": sarvam.DEFAULT_MODEL,
         "providers": llm.public_presets(),
+        "default_provider": llm.default_provider_id(),
+        "voices": sarvam.TTS_VOICES,
+        "default_voice": sarvam.DEFAULT_VOICE,
         "sample_report": SAMPLE_REPORT,
     }
 
@@ -115,6 +119,46 @@ def ask(req: AskRequest):
                              provider_dict(req.provider), req.model)
     except Exception as e:
         raise friendly_error(e, "Couldn't answer right now. Please try again.")
+
+
+class TTSRequest(BaseModel):
+    text: str
+    language: str = "hi-IN"
+    voice: str = ""
+
+
+@app.post("/api/tts")
+def tts(req: TTSRequest):
+    """Voice is always Sarvam Bulbul, whichever provider wrote the text."""
+    if not req.text.strip():
+        raise HTTPException(400, "Nothing to read aloud.")
+    if req.language not in LANGUAGES:
+        raise HTTPException(400, f"Unsupported language: {req.language}")
+    try:
+        return {"audios": sarvam.speak(req.text, req.language, req.voice)}
+    except Exception as e:
+        raise friendly_error(e, "Couldn't create the audio right now.")
+
+
+MAX_AUDIO_BYTES = 3 * 1024 * 1024  # ~30 s of compressed speech is far smaller
+
+
+@app.post("/api/stt")
+async def stt(audio: UploadFile = File(...)):
+    """Spoken question -> text with Sarvam Saaras (language auto-detected)."""
+    data = await audio.read()
+    if not data:
+        raise HTTPException(400, "No audio received. Please try recording again.")
+    if len(data) > MAX_AUDIO_BYTES:
+        raise HTTPException(413, "Recording is too long. Please keep it under 30 seconds.")
+    content_type = (audio.content_type or "audio/webm").split(";")[0]  # drop ";codecs=opus"
+    try:
+        out = sarvam.transcribe(audio.filename or "question.webm", data, content_type)
+    except Exception as e:
+        raise friendly_error(e, "Couldn't understand the audio. Please try again.")
+    if not out["transcript"]:
+        raise HTTPException(422, "I couldn't hear anything. Please speak closer to the mic and try again.")
+    return out
 
 
 class TestProviderRequest(BaseModel):

@@ -1,7 +1,9 @@
 """Thin wrappers around the Sarvam AI SDK."""
 
+import html
 import io
 import os
+import re
 import time
 from pathlib import Path
 
@@ -16,6 +18,13 @@ DEFAULT_MODEL = "sarvam-105b"
 FALLBACK_MODELS = ["sarvam-105b", "glm5.3", "gemma4", "deepseekv4.1-flash"]
 MIN_PDF_TEXT = 80  # fewer chars than this means a scanned PDF -> use Sarvam Vision
 DOC_AI_TIMEOUT_S = 60
+
+# Voice: Bulbul (text-to-speech) and Saaras (speech-to-text)
+TTS_MODEL = "bulbul:v3"
+TTS_MAX_CHARS = 2500  # bulbul:v3 limit per request
+TTS_VOICES = ["shubh", "ritu", "priya", "simran", "kavya", "aditya", "rahul", "anand"]  # bulbul:v3 speakers
+DEFAULT_VOICE = os.getenv("SARVAM_TTS_VOICE", "ritu")
+STT_MODEL = "saaras:v3"
 
 _client = None
 
@@ -43,6 +52,21 @@ def list_models() -> tuple[list[str], str]:
     return FALLBACK_MODELS, "fallback"
 
 
+def speak(text: str, language: str, voice: str | None = None) -> list[str]:
+    """Text -> speech with Bulbul. Returns base64 WAV clips to play in order."""
+    voice = voice if voice in TTS_VOICES else DEFAULT_VOICE
+    resp = client().text_to_speech.convert(
+        text=text[:TTS_MAX_CHARS], language_code=language, model=TTS_MODEL, speaker=voice, pace=0.95)
+    return resp.audios
+
+
+def transcribe(filename: str, data: bytes, content_type: str) -> dict:
+    """Speech -> text with Saaras; the spoken language is auto-detected."""
+    resp = client().speech_to_text.transcribe(
+        file=(filename, data, content_type), model=STT_MODEL, mode="transcribe", language_code="unknown")
+    return {"transcript": (resp.transcript or "").strip(), "language": resp.language_code}
+
+
 def extract_text(filename: str, data: bytes, content_type: str) -> tuple[str, str]:
     """Return (report text, source) for an uploaded PDF or image."""
     is_pdf = content_type == "application/pdf" or filename.lower().endswith(".pdf")
@@ -67,11 +91,26 @@ def _digitise(filename: str, data: bytes, content_type: str) -> str:
         status = c.doc_ai.get_status(job.job_id).status
     if status in ("failed", "rejected"):
         raise RuntimeError("Sarvam Vision could not read this file. Try a clearer photo or a PDF.")
-    results = c.doc_ai.get_results(job.job_id, format="md")
-    pages = [p.content or "" for doc in (results.documents or []) for p in (doc.pages or [])]
-    text = "\n\n".join(pages).strip()
+    # "md" is refused for jobs that produce html, and "html" comes back as a zip, so use json:
+    # documents[].pages[].blocks[] with {text, reading_order}; tables arrive as <table> html inside text
+    results = c.doc_ai.get_results(job.job_id, format="json").model_dump()
+    parts = []
+    for doc in results.get("documents") or []:
+        for page in doc.get("pages") or []:
+            blocks = sorted(page.get("blocks") or [], key=lambda b: b.get("reading_order") or 0)
+            parts += [b.get("text") or "" for b in blocks] or [page.get("content") or ""]
+    text = "\n\n".join(_html_to_text(p) for p in parts if p.strip()).strip()
     if not text:
         raise RuntimeError("No text found in this file. Try a clearer photo or a PDF.")
     return text
+
+
+def _html_to_text(s: str) -> str:
+    """Flatten Sarvam Vision block html (tables, line breaks) into plain lines: 'cell | cell | cell'."""
+    s = re.sub(r"</t[dh]>\s*", " | ", s, flags=re.I)
+    s = re.sub(r"</tr>|<br\s*/?>|</p>|</li>|</h\d>", "\n", s, flags=re.I)
+    s = html.unescape(re.sub(r"<[^>]+>", "", s))
+    lines = (line.strip(" |") for line in s.splitlines())
+    return "\n".join(line for line in lines if line)
 
 
